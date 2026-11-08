@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Secrets and environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local databases and data
+*.sqlite
+*.sqlite3
+*.db
+local-data/
+
+# Logs and temp
+*.log
+npm-debug.log*
+tmp/
+.tmp/
+
+# Generated media / exports
+exports/
+renders/
+shots/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
