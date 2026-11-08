@@ -8,10 +8,48 @@ plan promotion and hospitality, and see the financial consequences of every
 decision — with every fact labelled as verified, published, quoted, assumed or
 unknown.
 
-The full product definition is in
-[`docs/SHOWTIME_COMPLETE_PRODUCT_SPECIFICATION.md`](docs/SHOWTIME_COMPLETE_PRODUCT_SPECIFICATION.md).
+Full product definition: [`docs/SHOWTIME_COMPLETE_PRODUCT_SPECIFICATION.md`](docs/SHOWTIME_COMPLETE_PRODUCT_SPECIFICATION.md).
 
-## Current implementation status
+## Status (v0.1.0)
 
-Repository initialized. No application code yet — see `docs/CHANGELOG.md` for
-what has actually been built as work lands.
+A working **single-user, local-first** web app covering every module of the
+spec on one shared event model — Home, Events, Venue Explorer, 3D Studio
+(FIT + STAGECRAFT), Spotlight, Catalog, Campaign, Service, Finance &
+Simulation, Production and Settings. Data is stored in your browser.
+
+What it does **not** have yet: a server, accounts or collaboration, live
+integrations, pre-loaded real talent or real product listings, and several
+advanced technical-design tools. The full list is in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#not-built-yet-required-by-the-spec).
+How the seed data was sourced, and what is unverified, is in
+[`docs/DATA_PROVENANCE.md`](docs/DATA_PROVENANCE.md).
+
+## Run it
+
+Node 20 or newer.
+
+```bash
+npm install
+npm run dev        # http://127.0.0.1:5240
+```
+
+## Checks
+
+```bash
+npm test           # 46 engine + integration tests
+npm run typecheck
+npm run build
+```
+
+## Docs
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Data provenance](docs/DATA_PROVENANCE.md)
+- [Security & privacy](docs/SECURITY_AND_PRIVACY.md)
+- [Changelog](docs/CHANGELOG.md)
+
+## Licence
+
+Not yet chosen — all rights reserved by the owner until a licence is added.
+Venue, platform and brand names belong to their owners; SHOWTIME links to
+their official pages and implies no endorsement.

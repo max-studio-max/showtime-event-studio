@@ -285,6 +285,7 @@ export interface CampaignLine {
   invoicedMinor: number | null;
   observed: { impressions: number; clicks: number; conversions: number; spendMinor: number; revenueMinor: number; importedAt: ISO; source: string } | null;
   utm: { source: string; medium: string; campaign: string; content?: string };
+  landingUrl?: string;
   /** Optional explicit conversion model — only then may spend change the ticket forecast. */
   model: { cpcMinor: number; clickToTicketPct: number } | null;
   startDate?: string;

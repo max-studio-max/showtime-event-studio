@@ -77,5 +77,6 @@ export function convert(minor: number, rate: FxRate): number {
 
 export function findRate(rates: FxRate[], from: CurrencyCode, to: CurrencyCode): FxRate | null {
   if (from === to) return { from, to, rate: '1', source: 'identity', asOf: '1970-01-01T00:00:00Z' };
-  return rates.find((r) => r.from === from && r.to === to) ?? null;
+  // A blank or malformed rate is "no rate", never a silent zero conversion.
+  return rates.find((r) => r.from === from && r.to === to && /^\d+(\.\d+)?$/.test(r.rate) && Number(r.rate) > 0) ?? null;
 }
