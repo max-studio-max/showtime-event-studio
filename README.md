@@ -48,8 +48,15 @@ npm run build
 - [Security & privacy](docs/SECURITY_AND_PRIVACY.md)
 - [Changelog](docs/CHANGELOG.md)
 
-## Licence
+## Copyright and licence
 
-Not yet chosen — all rights reserved by the owner until a licence is added.
+Copyright © 2026 max-studio-max. **All rights reserved.**
+
+This repository is public for viewing only. No licence is granted: you may not
+copy, modify, distribute, sublicense or use this code or its documentation, in
+whole or in part, without prior written permission from the owner. Viewing
+or forking it on GitHub (as GitHub's Terms of Service allow) grants no
+other rights. See [`LICENSE`](LICENSE).
+
 Venue, platform and brand names belong to their owners; SHOWTIME links to
 their official pages and implies no endorsement.
