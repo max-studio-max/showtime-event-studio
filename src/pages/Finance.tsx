@@ -3,6 +3,8 @@ import { nowIso, uid } from '../domain/factory';
 import type { BudgetLine, CostCategory, RevenueLine, ShowEvent } from '../domain/types';
 import { computeFinance, type CaseResult } from '../engine/finance';
 import { compareScenarios, reproduce, snapshotScenario } from '../engine/scenario';
+import { api } from '../integrations/client';
+import type { FxObservation } from '../integrations/contracts';
 import { useStore } from '../state/store';
 import { Confirm, Empty, Field, MoneyInput, NeedEvent, NumInput, Panel, Tag, useDerived, useFmtMoney } from '../ui/kit';
 
@@ -14,6 +16,7 @@ function FinanceInner({ ev }: { ev: ShowEvent }) {
   const fmt = useFmtMoney();
   const [scName, setScName] = useState('');
   const [cmp, setCmp] = useState<string | null>(null);
+  const [fxErr, setFxErr] = useState<string | null>(null);
   const c = ev.currency;
   const set = (fn: (e: ShowEvent) => ShowEvent, what: string) => update(ev.id, fn, what, { coalesceKey: what });
   const setLine = (id: string, p: Partial<BudgetLine>, w: string) => set((e) => ({ ...e, budgetLines: e.budgetLines.map((l) => (l.id === id ? { ...l, ...p } : l)) }), `budget ${id} ${w}`);
@@ -143,6 +146,7 @@ function FinanceInner({ ev }: { ev: ShowEvent }) {
         )}
       </Panel>
       <Panel title="Exchange rates" actions={<button className="btn ghost sm" onClick={() => update(ev.id, (e) => ({ ...e, fxRates: [...e.fxRates, { from: c === 'CAD' ? 'USD' : 'CAD', to: c, rate: '', source: '', asOf: nowIso() }] }), 'add fx rate')}>+ Rate</button>}>
+        {fxErr && <p className="error small" role="alert">{fxErr}</p>}
         <p className="small muted">Used to convert foreign-currency lines into {c}. Original amounts and currencies are kept. Enter a rate from a source you trust and record it.</p>
         {ev.fxRates.map((r, i) => (
           <div key={i} className="row gap wrap">
@@ -151,6 +155,20 @@ function FinanceInner({ ev }: { ev: ShowEvent }) {
             <input aria-label="Rate" value={r.rate} placeholder="e.g. 1.3700" onChange={(e) => /^\d*\.?\d*$/.test(e.target.value) && set((x) => ({ ...x, fxRates: x.fxRates.map((y, j) => (j === i ? { ...y, rate: e.target.value } : y)) }), `fx ${i} rate`)} />
             <input aria-label="Source" value={r.source} placeholder="Source (e.g. Bank of Canada)" onChange={(e) => set((x) => ({ ...x, fxRates: x.fxRates.map((y, j) => (j === i ? { ...y, source: e.target.value } : y)) }), `fx ${i} source`)} />
             <input aria-label="As of" type="date" value={r.asOf.slice(0, 10)} onChange={(e) => set((x) => ({ ...x, fxRates: x.fxRates.map((y, j) => (j === i ? { ...y, asOf: new Date(e.target.value).toISOString() } : y)) }), `fx ${i} date`)} />
+            {(r.from === 'CAD' || r.to === 'CAD') && r.from !== r.to && (
+              <button
+                className="btn ghost sm"
+                title="Fetch the latest Bank of Canada daily average through the SHOWTIME gateway"
+                onClick={async () => {
+                  const res = await api<FxObservation>('/api/fx', { from: r.from, to: r.to }, 'bank_of_canada');
+                  if (!res.ok) return setFxErr(res.error.message);
+                  setFxErr(null);
+                  update(ev.id, (x) => ({ ...x, fxRates: x.fxRates.map((y, j) => (j === i ? { ...y, rate: res.data.rate, source: res.data.source, asOf: new Date(`${res.data.date}T00:00:00Z`).toISOString() } : y)) }), `fx ${r.from}→${r.to} from Bank of Canada`);
+                }}
+              >
+                Fetch Bank of Canada rate
+              </button>
+            )}
             <button className="btn ghost sm" onClick={() => update(ev.id, (x) => ({ ...x, fxRates: x.fxRates.filter((_, j) => j !== i) }), 'remove fx')}>Remove</button>
           </div>
         ))}

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 — 2026-11-08
+
+Live data, discovery and source verification (docs/SHOWTIME_LIVE_DATA_INTEGRATION_SPEC.md).
+
+- Read-only integration gateway (`npm run gateway`) holding provider credentials server-side, with host allowlist, parameter validation, timeouts, retry/backoff/jitter, Retry-After, per-provider spacing and daily budgets, circuit breaker, request coalescing, TTL cache and redacted logs.
+- Free providers: Ticketmaster Discovery v2 (key required), OpenStreetMap Overpass + Nominatim, MusicBrainz, Bank of Canada Valet. All off by default; toggles and live status in Settings.
+- New Discover page: venues, comparable events (with published price ranges), performers and service suppliers; every state handled (disabled, gateway offline, not configured, rate-limited, paused, timeout, empty, partial); shortlist and compare tray.
+- Venues saved from discovery appear in Venue Explorer as illustrative, provider-reported venues; review requires the official source URL. Unknown time zone/country never changes the event.
+- MusicBrainz official homepage and booking links pre-fill Spotlight drafts; no booking route = cannot be saved.
+- Service suppliers: proposed (no cost) → quote requested (total incomplete) → confirmed private quote (priced).
+- Bank of Canada exchange rates on Finance FX rows; exact published string, integer inversion.
+- Campaign CSV imports de-duplicate by date/campaign/ad keys.
+- Workspace schema 2 with idempotent migration and automatic backup; removing a saved venue/supplier removes its provider evidence.
+- Overpass outage fallback to Nominatim for venue search (exercised live during a real outage).
+- `npm run build` now fails if a configured secret appears in the browser bundle.
+- Tests: 88 (42 new contract, failure-mode, security, migration and integration tests on synthetic fixtures).
+
 ## 0.1.0 — 2026-11-08
 
 First working build. Local-first web app; see `ARCHITECTURE.md` for what is and is not built.

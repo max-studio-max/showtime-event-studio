@@ -173,3 +173,68 @@ export function parseCsv(text: string): string[][] {
 export function toCsv(rows: (string | number | null)[][]): string {
   return rows.map((r) => r.map((c) => (c == null ? '' : /[",\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : String(c))).join(',')).join('\n');
 }
+
+export interface MetricRow {
+  key: string;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  spendMinor: number;
+  revenueMinor: number;
+}
+
+/**
+ * Parse an ad-platform CSV export into rows with a stable de-duplication key:
+ * date + campaign/ad set/ad identifiers when present, otherwise the row's full
+ * content. Re-importing the same export adds nothing.
+ */
+export function parseMetricRows(text: string): MetricRow[] | string {
+  const rows = parseCsv(text.trim());
+  if (rows.length < 2) return 'CSV needs a header row and at least one data row';
+  const h = rows[0].map((x) => x.trim().toLowerCase());
+  const col = (...names: string[]) => h.findIndex((x) => names.includes(x));
+  const need = ['impressions', 'clicks', 'conversions', 'spend'];
+  const missing = need.filter((n) => col(n) < 0);
+  if (missing.length) return `Missing column(s): ${missing.join(', ')} (revenue optional)`;
+  const idCols = [col('date', 'day', 'reporting starts'), col('campaign', 'campaign name', 'campaign id'), col('ad set', 'ad set name', 'ad group', 'ad set id'), col('ad', 'ad name', 'ad id')].filter((i) => i >= 0);
+  const val = (r: string[], n: string, money = false) => {
+    const v = Number((r[col(n)] ?? '').replace(/[$,\s]/g, ''));
+    return Number.isFinite(v) ? (money ? Math.round(v * 100) : v) : 0;
+  };
+  return rows.slice(1).map((r) => ({
+    key: idCols.length ? idCols.map((i) => (r[i] ?? '').trim().toLowerCase()).join('|') : `row:${r.map((c) => c.trim()).join('|')}`,
+    impressions: val(r, 'impressions'),
+    clicks: val(r, 'clicks'),
+    conversions: val(r, 'conversions'),
+    spendMinor: val(r, 'spend', true),
+    revenueMinor: col('revenue') >= 0 ? val(r, 'revenue', true) : 0,
+  }));
+}
+
+/** Add only rows whose key has not been imported before. */
+export function mergeObserved(existing: CampaignLine['observed'], rows: MetricRow[], source: string, now: string): { observed: NonNullable<CampaignLine['observed']>; added: number; duplicates: number } {
+  const seen = new Set(existing?.rowKeys ?? []);
+  const base = existing ?? { impressions: 0, clicks: 0, conversions: 0, spendMinor: 0, revenueMinor: 0, importedAt: now, source, rowKeys: [] };
+  const out = { ...base, rowKeys: [...(base.rowKeys ?? [])] };
+  let added = 0;
+  let duplicates = 0;
+  for (const r of rows) {
+    if (seen.has(r.key)) {
+      duplicates++;
+      continue;
+    }
+    seen.add(r.key);
+    out.rowKeys.push(r.key);
+    out.impressions += r.impressions;
+    out.clicks += r.clicks;
+    out.conversions += r.conversions;
+    out.spendMinor += r.spendMinor;
+    out.revenueMinor += r.revenueMinor;
+    added++;
+  }
+  if (added) {
+    out.importedAt = now;
+    out.source = existing && existing.source !== source ? `${existing.source}; ${source}` : source;
+  }
+  return { observed: out, added, duplicates };
+}

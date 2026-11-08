@@ -214,6 +214,7 @@ export function createEvent(templateKey: string, title: string, orgId: string, a
       { kind: 'checkin', servedPerHourPerStation: 300, usageShare: 1, staffPerStation: 2 },
     ],
     staff: [],
+    supplierAssignments: [],
     schedule: blocks,
     cues: [],
     tasks: [],
@@ -261,12 +262,16 @@ export function applyVenue(ev: ShowEvent, v: Venue, configId: string): { event: 
   scene.room.note = `Illustrative shell for ${v.space} — venue geometry not measured`;
   const cfg = v.configurations.find((c) => c.id === configId);
   changes.push(`Capacity reference: ${cfg?.name ?? 'configuration'} = ${cfg?.capacity ?? 'unknown'}`);
-  const currency = v.country === 'CA' ? 'CAD' : 'USD';
+  // Unknown country or time zone keeps the event's own setting instead of guessing.
+  const currency = v.country === 'CA' ? 'CAD' : v.country === 'US' ? 'USD' : ev.currency;
+  const timezone = v.timezone || ev.timezone;
   if (currency !== ev.currency) changes.push(`Event currency changed ${ev.currency} → ${currency}; existing amounts keep their own currency`);
-  if (v.timezone !== ev.timezone) changes.push(`Time zone changed ${ev.timezone} → ${v.timezone}`);
+  if (timezone !== ev.timezone) changes.push(`Time zone changed ${ev.timezone} → ${timezone}`);
+  if (!v.timezone) changes.push(`Venue time zone not published — event keeps ${ev.timezone}; confirm it`);
+  if (!v.country) changes.push(`Venue country not published — event currency stays ${ev.currency}`);
   if (!v.indoor) changes.push('Outdoor venue: add weather contingency to schedule and budget');
   return {
-    event: { ...ev, venueId: v.id, venueConfigId: configId, timezone: v.timezone, currency, venueBooking: { state: 'none' }, scene: { ...scene, version: scene.version + 1 } },
+    event: { ...ev, venueId: v.id, venueConfigId: configId, timezone, currency, venueBooking: { state: 'none' }, scene: { ...scene, version: scene.version + 1 } },
     changes,
   };
 }

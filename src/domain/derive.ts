@@ -11,13 +11,16 @@ import { availableTickets, computeFinance, type CapacityResult, type FinanceInpu
 import { estimateQueue, lineupOverlaps, scheduleConflicts, staffCost, totalGuests, type QueueEstimate } from '../engine/operations';
 import { effectiveStatus, findConflicts, offerView } from '../engine/provenance';
 import { analyzeScene, patchIssues, type SceneAnalysis } from '../engine/sceneAnalysis';
-import type { BudgetLine, PriceOffer, Product, ShowEvent, SourceEvidence, TalentAct, Venue, VenueConfiguration, VerificationStatus } from './types';
+import type { BudgetLine, PriceOffer, Product, SavedReference, ServiceSupplier, ShowEvent, SourceEvidence, TalentAct, Venue, VenueConfiguration, VerificationStatus } from './types';
 
 export interface WorkspaceData {
   products: Product[];
   offers: PriceOffer[];
   acts: TalentAct[];
-  evidence: SourceEvidence[]; // user-recorded evidence, incl. reviews and contradicting sources
+  evidence: SourceEvidence[]; // user-recorded evidence, reviews, contradicting sources, saved provider facts
+  venues: Venue[]; // venues saved from live discovery
+  suppliers: ServiceSupplier[];
+  references: SavedReference[];
 }
 
 export interface CrossIssue {
@@ -45,6 +48,7 @@ export interface Derived {
 
 export const allEvidence = (ws: WorkspaceData) => [...venueEvidence, ...ws.evidence];
 export const allProducts = (ws: WorkspaceData) => [...genericProducts, ...ws.products];
+export const findVenue = (id: string | null, ws: WorkspaceData): Venue | null => venueById(id) ?? ws.venues.find((v) => v.id === id) ?? null;
 
 /** Venue capacity for the chosen configuration with its effective provenance status. */
 export function venueCapacityFor(config: VenueConfiguration | null, ws: WorkspaceData, now: Date): Derived['venueCapacity'] {
@@ -130,6 +134,27 @@ export function derivedCostLines(ev: ShowEvent, ws: WorkspaceData, venue: Venue 
     const amt = c.invoicedMinor ?? c.committedMinor ?? c.plannedMinor;
     out.push({ id: `d-camp-${c.id}`, category: 'marketing', label: `Promotion: ${ch?.name ?? c.channelId}`, amountMinor: amt, currency: cur, basis: 'fixed', quantity: 1, state: c.invoicedMinor != null ? 'paid' : c.committedMinor != null ? 'committed' : 'estimated', source: c.invoicedMinor != null ? 'invoice' : 'assumption', sourceNote: c.invoicedMinor != null ? 'Actual invoice' : c.committedMinor != null ? 'Committed spend' : 'Planned spend', derivedFrom: { module: 'campaign', refId: c.id } });
   }
+  for (const a of ev.supplierAssignments ?? []) {
+    // Proposed suppliers carry no cost. Once a quote is requested the line exists but stays unpriced
+    // until the organizer confirms amount, currency and quantity (LD spec §8).
+    if (a.status === 'proposed' || a.status === 'declined') continue;
+    const sup = ws.suppliers.find((x) => x.id === a.supplierId);
+    const q = a.quote;
+    const priced = !!q && q.confirmed && q.amountMinor != null && q.quantity > 0;
+    out.push({
+      id: `d-supplier-${a.id}`,
+      category: a.category,
+      label: `Supplier: ${sup?.name ?? 'removed supplier'} — ${a.role}`,
+      amountMinor: priced ? q!.amountMinor : null,
+      currency: q?.currency ?? cur,
+      basis: q?.basis ?? 'fixed',
+      quantity: q?.quantity ?? 1,
+      state: a.status === 'confirmed' ? 'committed' : 'quoted',
+      source: priced ? 'private_quote' : 'assumption',
+      sourceNote: priced ? `Confirmed private quote${q!.validUntil ? `, valid to ${q!.validUntil}` : ''}${q!.terms ? ` · ${q!.terms}` : ''}` : 'Quote pending — confirm amount, currency and quantity',
+      derivedFrom: { module: 'supplier', refId: a.id },
+    });
+  }
   for (const s of ev.staff) {
     const sc = staffCost([s]);
     out.push({ id: `d-staff-${s.id}`, category: 'staffing', label: `Staff: ${s.role}${s.person ? ` (${s.person})` : ''} ${sc.hours.toFixed(1)} h`, amountMinor: s.rateMinorPerHour == null ? null : sc.knownMinor, currency: cur, basis: 'fixed', quantity: 1, state: 'estimated', source: 'assumption', sourceNote: s.rateMinorPerHour == null ? 'Rate not set' : 'Hours × rate', derivedFrom: { module: 'service', refId: s.id } });
@@ -138,7 +163,7 @@ export function derivedCostLines(ev: ShowEvent, ws: WorkspaceData, venue: Venue 
 }
 
 export function deriveEvent(ev: ShowEvent, ws: WorkspaceData, now = new Date()): Derived {
-  const venue = venueById(ev.venueId);
+  const venue = findVenue(ev.venueId, ws);
   const config = venue?.configurations.find((c) => c.id === ev.venueConfigId) ?? null;
   const venueCapacity = venueCapacityFor(config, ws, now);
   const analysis = analyzeScene(ev.scene);

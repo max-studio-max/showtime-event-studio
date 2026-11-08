@@ -275,3 +275,15 @@ button.card { cursor: pointer; }
   .studio-body { grid-template-columns: 1fr; grid-template-rows: auto 60vh auto; }
   .page { padding: 14px 16px 40px; }
 }
+
+/* ---------- live data */
+.badge-providerreported { color: #0f6b6b; border-color: #9dd3d0; background: #ebf7f6; border-style: dashed; }
+.net-state { border: 1px solid var(--line-2); border-left: 4px solid var(--warn); background: #fff7e6; border-radius: 8px; padding: 10px 14px; display: grid; gap: 4px; }
+.net-state p { margin: 0; }
+.net-state.net-disabled, .net-state.net-not_configured { border-left-color: var(--info); background: #eef4fc; }
+.net-state.net-gateway_offline, .net-state.net-upstream_error, .net-state.net-circuit_open, .net-state.net-unauthorized { border-left-color: var(--bad); background: #fdeeee; }
+.result-card { align-content: start; }
+.links-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; display: grid; gap: 2px; }
+.links-box .ext { margin-right: 8px; }
+.migration-banner { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 18px; background: #eef4fc; border-bottom: 1px solid #a9c3e8; font-size: 13px; }
+.seg[role='tablist'] { align-self: start; }

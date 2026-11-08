@@ -17,6 +17,7 @@ const BADGE_GLYPH: Record<BadgeKind, string> = {
   Stale: '⌛',
   Conflicted: '⚠',
   'User-entered quote': '✎',
+  'Provider-reported': '⇣',
 };
 
 export function Badge({ kind, title }: { kind: BadgeKind; title?: string }) {
@@ -174,7 +175,10 @@ export function useWorkspaceData() {
   const offers = useStore((s) => s.offers);
   const acts = useStore((s) => s.acts);
   const evidence = useStore((s) => s.evidence);
-  return useMemo(() => ({ products, offers, acts, evidence }), [products, offers, acts, evidence]);
+  const venues = useStore((s) => s.venues);
+  const suppliers = useStore((s) => s.suppliers);
+  const references = useStore((s) => s.references);
+  return useMemo(() => ({ products, offers, acts, evidence, venues, suppliers, references }), [products, offers, acts, evidence, venues, suppliers, references]);
 }
 
 export function useDerived(ev: ShowEvent | null): Derived | null {

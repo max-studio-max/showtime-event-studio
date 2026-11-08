@@ -55,3 +55,29 @@ a re-check. Changing a route archives the old one in the act's history.
 | Talent booking route | 90 |
 | Channel rule | 90 |
 | Venue fact | 180 |
+
+## Live provider data (v0.2)
+
+Results from Ticketmaster, OpenStreetMap, MusicBrainz and the Bank of Canada
+carry status **`provider_reported`** (badge "Provider-reported"): a real
+record returned by the provider, not reviewed at the authoritative source.
+Every fact has its own evidence row (`providerId`, `providerRecordId`,
+`sourceUrl`, `retrievedAt`, usage policy). Missing values produce no evidence
+and stay `null`.
+
+- **Upgrading trust:** only a person can, by recording the official page
+  (e.g. the venue's own rental page) where the fact is confirmed. A provider's
+  listing page is never accepted as that source.
+- **Capacity:** only OpenStreetMap publishes a `capacity` tag, and only plain
+  integers are accepted. It is an upper bound to confirm, never certified
+  inventory.
+- **Prices:** Ticketmaster event price ranges are shown as published face
+  value for comparable-event research; they are not SHOWTIME ticket prices.
+  No supplier or venue prices come from providers.
+- **Booking routes:** MusicBrainz `booking` relations are community-maintained
+  leads; they pre-fill a draft but stay unverified until checked.
+- **Snapshots:** saved references keep the values seen at save time, so later
+  provider changes don't silently rewrite research.
+- **Fixtures:** all test data in `tests/fixtures/providers.ts` is synthetic and
+  labelled as such; no provider data is committed.
+- Per-provider rules, limits and licences: `docs/providers/`.

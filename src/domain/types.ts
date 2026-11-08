@@ -18,7 +18,9 @@ export type VerificationStatus =
   | 'contradicted'
   | 'unavailable'
   | 'modeled'
-  | 'illustrative';
+  | 'illustrative'
+  /** Returned by a provider API/open dataset: real record, not reviewed at the authoritative source. */
+  | 'provider_reported';
 
 export type SourceType =
   | 'official_venue_website'
@@ -32,7 +34,11 @@ export type SourceType =
   | 'connected_account'
   | 'invoice'
   | 'user_entry'
-  | 'specification_research_notes';
+  | 'specification_research_notes'
+  | 'provider_api'
+  | 'open_dataset';
+
+export type ProviderId = 'ticketmaster' | 'osm_overpass' | 'osm_nominatim' | 'musicbrainz' | 'bank_of_canada';
 
 export interface SourceEvidence {
   id: string;
@@ -56,6 +62,18 @@ export interface SourceEvidence {
   usagePolicy: string;
   notes?: string;
   supersededBy?: string;
+  /** Live-data envelope (spec LD §3.4). */
+  providerId?: ProviderId;
+  providerRecordId?: string;
+  sourceFieldPath?: string;
+  observedAt?: ISO;
+  checkedAt?: ISO;
+  expiresAt?: ISO;
+  verificationMethod?: string;
+  lastVerifiedBy?: string;
+  rawPayloadHash?: string;
+  currency?: string;
+  conflictGroupId?: string;
 }
 
 export type GeometryFidelity = 'verified_dimensions' | 'partial_dimensions' | 'illustrative';
@@ -80,12 +98,14 @@ export interface PublishedRate {
 
 export interface Venue {
   id: string;
+  /** Present on venues saved from a provider search; seed venues have none. */
+  provider?: { id: ProviderId; recordId: string; listingUrl: string | null; savedAt: ISO; attribution: string };
   organization: string;
   campus: string;
   space: string;
-  market: 'Toronto' | 'New York City' | 'Greater Los Angeles';
+  market: string;
   locality: string;
-  country: 'CA' | 'US';
+  country: string;
   timezone: string;
   roomType: string;
   indoor: boolean;
@@ -283,7 +303,7 @@ export interface CampaignLine {
   plannedMinor: number | null;
   committedMinor: number | null;
   invoicedMinor: number | null;
-  observed: { impressions: number; clicks: number; conversions: number; spendMinor: number; revenueMinor: number; importedAt: ISO; source: string } | null;
+  observed: { impressions: number; clicks: number; conversions: number; spendMinor: number; revenueMinor: number; importedAt: ISO; source: string; rowKeys?: string[] } | null;
   utm: { source: string; medium: string; campaign: string; content?: string };
   landingUrl?: string;
   /** Optional explicit conversion model — only then may spend change the ticket forecast. */
@@ -317,6 +337,49 @@ export interface StaffShift {
   end: string;
   rateMinorPerHour: number | null;
   zone?: string;
+}
+
+export type SupplierCategory = 'caterer' | 'event_rental' | 'security' | 'staffing' | 'transport' | 'sanitation' | 'av_production';
+
+/** A real business saved from a provider search. Existence is not availability, eligibility or vetting. */
+export interface ServiceSupplier {
+  id: string;
+  name: string;
+  category: SupplierCategory;
+  provider: { id: ProviderId; recordId: string; attribution: string; savedAt: ISO } | null;
+  address: string | null;
+  website: string | null;
+  phone: string | null;
+  lat: number | null;
+  lon: number | null;
+  evidenceIds: string[];
+  notes?: string;
+}
+
+export interface SupplierAssignment {
+  id: string;
+  supplierId: string;
+  role: string;
+  status: 'proposed' | 'quote_requested' | 'quoted' | 'confirmed' | 'declined';
+  /** Private quote. Only a confirmed quote with amount, currency and quantity becomes a priced cost line. */
+  quote: { amountMinor: number | null; currency: string; quantity: number; basis: 'fixed' | 'per_attendee'; validUntil?: string; terms?: string; confirmed: boolean } | null;
+  category: CostCategory;
+}
+
+/** A user-selected discovery result kept as a reference (shortlist / comparable / event research). */
+export interface SavedReference {
+  id: string;
+  type: 'event' | 'venue' | 'performer' | 'service';
+  providerId: ProviderId;
+  providerRecordId: string;
+  name: string;
+  url: string | null;
+  /** Minimal snapshot of the values seen at save time, for reproducibility. */
+  snapshot: Record<string, string | number | null>;
+  retrievedAt: ISO;
+  savedAt: ISO;
+  eventIds: string[];
+  note?: string;
 }
 
 // ---------------------------------------------------------------- production
@@ -381,7 +444,7 @@ export interface BudgetLine {
   source: 'published' | 'private_quote' | 'assumption' | 'invoice' | 'derived';
   sourceNote?: string;
   /** Lines generated from other modules carry their origin so they are not double counted. */
-  derivedFrom?: { module: 'catalog' | 'spotlight' | 'campaign' | 'service' | 'venue'; refId: string };
+  derivedFrom?: { module: 'catalog' | 'spotlight' | 'campaign' | 'service' | 'venue' | 'supplier'; refId: string };
 }
 
 export interface RevenueLine {
@@ -474,6 +537,7 @@ export interface ShowEvent {
   cohorts: GuestCohort[];
   stationAssumptions: StationAssumption[];
   staff: StaffShift[];
+  supplierAssignments: SupplierAssignment[];
   schedule: ScheduleBlock[];
   cues: Cue[];
   tasks: Task[];

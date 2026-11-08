@@ -6,7 +6,7 @@ import { applyVenue, createEvent } from '../src/domain/factory';
 import { deriveEvent, type WorkspaceData } from '../src/domain/derive';
 import type { ShowEvent } from '../src/domain/types';
 
-const ws: WorkspaceData = { products: [], offers: [], acts: [], evidence: [] };
+const ws: WorkspaceData = { products: [], offers: [], acts: [], evidence: [], venues: [], suppliers: [], references: [] };
 const NOW = new Date('2026-11-08T12:00:00Z');
 
 function comedyAt(venueId: string): ShowEvent {

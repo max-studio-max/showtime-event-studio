@@ -10,16 +10,20 @@ unknown.
 
 Full product definition: [`docs/SHOWTIME_COMPLETE_PRODUCT_SPECIFICATION.md`](docs/SHOWTIME_COMPLETE_PRODUCT_SPECIFICATION.md).
 
-## Status (v0.1.0)
+## Status (v0.2.0)
 
 A working **single-user, local-first** web app covering every module of the
 spec on one shared event model — Home, Events, Venue Explorer, 3D Studio
 (FIT + STAGECRAFT), Spotlight, Catalog, Campaign, Service, Finance &
 Simulation, Production and Settings. Data is stored in your browser.
 
-What it does **not** have yet: a server, accounts or collaboration, live
-integrations, pre-loaded real talent or real product listings, and several
-advanced technical-design tools. The full list is in
+**v0.2 adds live data:** a Discover page backed by free public sources
+(Ticketmaster Discovery, OpenStreetMap, MusicBrainz, Bank of Canada) through a
+local read-only gateway. See [`docs/providers/`](docs/providers/README.md).
+
+What it does **not** have yet: accounts, shared storage or collaboration,
+ad-account connectors, real supplier price feeds, and several advanced
+technical-design tools. The full list is in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#not-built-yet-required-by-the-spec).
 How the seed data was sourced, and what is unverified, is in
 [`docs/DATA_PROVENANCE.md`](docs/DATA_PROVENANCE.md).
@@ -30,13 +34,17 @@ Node 20 or newer.
 
 ```bash
 npm install
-npm run dev        # http://127.0.0.1:5240
+npm run dev:all    # gateway + app → http://127.0.0.1:5240
 ```
+
+Live providers start switched off: enable them in *Team & Settings → Live data
+providers*. For Ticketmaster, put a free key in `.env` as
+`TICKETMASTER_API_KEY` (see `.env.example`).
 
 ## Checks
 
 ```bash
-npm test           # 46 engine + integration tests
+npm test           # 88 engine, integration and live-data tests
 npm run typecheck
 npm run build
 ```

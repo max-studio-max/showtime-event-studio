@@ -1,7 +1,7 @@
 /** Source freshness, badges and conflict detection. */
 import type { PriceOffer, SourceEvidence, VerificationStatus } from '../domain/types';
 
-export type Badge = 'Verified' | 'Published/dated' | 'Source available' | 'Assumption' | 'Estimated' | 'Missing' | 'Stale' | 'Conflicted' | 'User-entered quote';
+export type Badge = 'Verified' | 'Published/dated' | 'Source available' | 'Provider-reported' | 'Assumption' | 'Estimated' | 'Missing' | 'Stale' | 'Conflicted' | 'User-entered quote';
 
 /** Review cadence per data category, in days. */
 export const FRESHNESS_DAYS = { price: 30, venue: 180, talent: 90, channel: 90 } as const;
@@ -38,6 +38,8 @@ export function badgeFor(status: VerificationStatus): Badge {
       return 'Estimated';
     case 'illustrative':
       return 'Assumption';
+    case 'provider_reported':
+      return 'Provider-reported';
   }
 }
 

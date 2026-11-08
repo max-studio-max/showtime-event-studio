@@ -2,25 +2,15 @@ import { useState } from 'react';
 import { nowIso, uid } from '../domain/factory';
 import type { LineupSlot, ShowEvent, TalentAct } from '../domain/types';
 import { fromMin, lineupOverlaps, toMin } from '../engine/operations';
-import { effectiveStatus, isHttpUrl } from '../engine/provenance';
+import { effectiveStatus } from '../engine/provenance';
+import { validateAct } from '../domain/talent';
 import { useActiveEvent, useStore } from '../state/store';
 import { Confirm, Empty, ExternalLink, Field, MoneyInput, NumInput, Panel, StatusBadge, Tag } from '../ui/kit';
 
 const ACT_TYPES: TalentAct['actType'][] = ['stand-up comedy', 'solo musician', 'band', 'DJ', 'speaker', 'host/emcee', 'magician', 'dancer', 'cultural', 'specialty', 'family'];
 const ROUTE_LABEL = { agency_page: 'Agency / management booking page', contact_form: 'Official contact form', business_email: 'Published business email', booking_phone: 'Published booking phone' } as const;
 
-export function validateAct(a: Partial<TalentAct>): string[] {
-  const e: string[] = [];
-  if (!a.stageName?.trim()) e.push('Stage name is required');
-  if (!a.officialSiteUrl || !isHttpUrl(a.officialSiteUrl)) e.push('Official website or profile URL is required');
-  if (!a.sourceUrl || !isHttpUrl(a.sourceUrl)) e.push('Source URL (where the booking route is published) is required');
-  const r = a.bookingRoute;
-  if (!r?.value.trim()) e.push('Booking route is required');
-  else if ((r.type === 'agency_page' || r.type === 'contact_form') && !isHttpUrl(r.value)) e.push('Booking page must be a URL');
-  else if (r.type === 'business_email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.value)) e.push('Business email looks invalid');
-  else if (r.type === 'booking_phone' && !/^[+\d][\d\s().-]{6,}$/.test(r.value)) e.push('Phone number looks invalid');
-  return e;
-}
+export { validateAct };
 
 function routeHref(r: TalentAct['bookingRoute']) {
   if (r.type === 'business_email') return `mailto:${r.value}`;
@@ -28,7 +18,8 @@ function routeHref(r: TalentAct['bookingRoute']) {
   return r.value;
 }
 
-function ActForm({ initial, onDone }: { initial?: TalentAct; onDone: () => void }) {
+/** `draft` = pre-filled from a discovery result and not yet in the directory. */
+export function ActForm({ initial, onDone, draft = false }: { initial?: TalentAct; onDone: () => void; draft?: boolean }) {
   const upsert = useStore((s) => s.upsertAct);
   const user = useStore((s) => s.user.name);
   const [a, setA] = useState<TalentAct>(
@@ -45,8 +36,10 @@ function ActForm({ initial, onDone }: { initial?: TalentAct; onDone: () => void 
         setErrors(errs);
         if (errs.length) return;
         const routeChanged = initial && (initial.bookingRoute.value !== a.bookingRoute.value || initial.bookingRoute.type !== a.bookingRoute.type);
-        const notes = routeChanged ? `${a.notes ?? ''}\nSuperseded route archived ${nowIso().slice(0, 10)}: ${initial!.bookingRoute.type} ${initial!.bookingRoute.value}`.trim() : a.notes;
-        upsert({ ...a, notes, lastChecked: nowIso(), status: confirmed ? 'verified_authoritative' : 'third_party_unverified', verifiedOn: confirmed ? nowIso() : null, ...(confirmed ? { notes: `${notes ?? ''}\nRoute confirmed at source by ${user} ${nowIso().slice(0, 10)}`.trim() } : {}) });
+        const notes = routeChanged && !draft && initial!.bookingRoute.value ? `${a.notes ?? ''}\nSuperseded route archived ${nowIso().slice(0, 10)}: ${initial!.bookingRoute.type} ${initial!.bookingRoute.value}`.trim() : a.notes;
+        // A provider-supplied route the user did not change or confirm stays provider-reported.
+        const unconfirmed = draft && !routeChanged && initial?.status === 'provider_reported' ? 'provider_reported' : 'third_party_unverified';
+        upsert({ ...a, notes, lastChecked: nowIso(), status: confirmed ? 'verified_authoritative' : unconfirmed, verifiedOn: confirmed ? nowIso() : null, ...(confirmed ? { notes: `${notes ?? ''}\nRoute confirmed at source by ${user} ${nowIso().slice(0, 10)}`.trim() } : {}) });
         onDone();
       }}
     >

@@ -19,6 +19,7 @@ function EvidenceTable({ venue }: { venue: Venue }) {
   const addEvidence = useStore((s) => s.addEvidence);
   const removeEvidence = useStore((s) => s.removeEvidence);
   const [confirmOpen, setConfirmOpen] = useState<string | null>(null);
+  const [officialUrl, setOfficialUrl] = useState('');
   const rows = allEvidence(ws).filter((e) => e.entityId === venue.id || venue.configurations.some((c) => c.id === e.entityId));
   const reviewOf = (id: string) => ws.evidence.find((e) => e.fieldPath === `review:${id}`);
   return (
@@ -37,6 +38,18 @@ function EvidenceTable({ venue }: { venue: Venue }) {
               <td>
                 {review ? (
                   <button className="btn ghost sm" onClick={() => removeEvidence(review.id)}>Withdraw review</button>
+                ) : confirmOpen === e.id && e.providerId ? (
+                  <span className="confirm">
+                    Official venue page that states {String(e.assertedValue)} {e.unit}:
+                    <input aria-label="Official source URL" placeholder="https://venue site…" value={officialUrl} onChange={(x) => setOfficialUrl(x.target.value)} />
+                    <button className="btn sm" disabled={!isHttpUrl(officialUrl)} onClick={() => {
+                      // A provider's own page is not authoritative; the review records the official page instead.
+                      addEvidence({ ...e, id: uid('rev'), fieldPath: `review:${e.id}`, reviewerId: user, retrievedAt: nowIso(), verificationStatus: 'verified_authoritative', sourceType: 'official_venue_website', sourceUrl: officialUrl, publisher: new URL(officialUrl).hostname, extractionMethod: 'Manual review at the official source', verificationMethod: 'user_reviewed', lastVerifiedBy: user, notes: `Reviewer confirmed ${e.fieldPath} on the official page` });
+                      setConfirmOpen(null);
+                      setOfficialUrl('');
+                    }}>Confirm</button>
+                    <button className="btn ghost sm" onClick={() => setConfirmOpen(null)}>Cancel</button>
+                  </span>
                 ) : confirmOpen === e.id ? (
                   <span className="confirm">
                     I opened the source and it states {String(e.assertedValue)} {e.unit}.
@@ -46,6 +59,8 @@ function EvidenceTable({ venue }: { venue: Venue }) {
                     }}>Confirm</button>
                     <button className="btn ghost sm" onClick={() => setConfirmOpen(null)}>Cancel</button>
                   </span>
+                ) : e.providerId ? (
+                  <button className="btn ghost sm" onClick={() => setConfirmOpen(e.id)}>Confirm at official source…</button>
                 ) : e.sourceUrl && !ws.evidence.some((x) => x.id === e.id) ? (
                   <button className="btn ghost sm" onClick={() => setConfirmOpen(e.id)}>Review at source…</button>
                 ) : ws.evidence.some((x) => x.id === e.id) ? (
@@ -194,7 +209,14 @@ function VenueDetail({ venue }: { venue: Venue }) {
         <div>
           <h3>Booking route</h3>
           <p>{venue.bookingRoute}</p>
-          <ul className="plain">{venue.officialUrls.map((u) => <li key={u}><ExternalLink href={u}>Official source</ExternalLink></li>)}</ul>
+          <ul className="plain">
+            {venue.officialUrls.map((u) => (
+              <li key={u}>
+                <ExternalLink href={u}>{!venue.provider ? 'Official source' : u === venue.provider.listingUrl ? `${venue.provider.id === 'ticketmaster' ? 'Ticketmaster' : 'OpenStreetMap'} listing` : 'Website (as mapped — confirm it is official)'}</ExternalLink>
+              </li>
+            ))}
+          </ul>
+          {venue.provider && <p className="small muted">Saved {venue.provider.savedAt.slice(0, 10)} · {venue.provider.attribution}</p>}
           {venue.features.length > 0 && <><h3>Published features</h3><ul>{venue.features.map((f) => <li key={f}>{f}</li>)}</ul></>}
           {venue.restrictions.length > 0 && <><h3>Restrictions</h3><ul>{venue.restrictions.map((f) => <li key={f}>{f}</li>)}</ul></>}
           <h3>Still to verify</h3>
@@ -237,16 +259,21 @@ export function Venues() {
   const [sel, setSel] = useState<string | null>(null);
   const [compare, setCompare] = useState<string[]>([]);
   const ws = useWorkspaceData();
-  const list = venues.filter((v) => (!market || v.market === market) && (!suit || v.suitability.includes(suit)) && (!minCap || v.configurations.some((c) => (c.capacity ?? 0) >= Number(minCap))));
-  const selected = venues.find((v) => v.id === sel);
-  const cmp = venues.filter((v) => compare.includes(v.id));
+  const go = useStore((s) => s.go);
+  const removeVenue = useStore((s) => s.removeVenue);
+  const events = useStore((s) => s.events);
+  const all = [...venues, ...ws.venues];
+  const markets = [...new Set(all.map((v) => v.market))].sort();
+  const list = all.filter((v) => (!market || v.market === market) && (!suit || v.suitability.includes(suit)) && (!minCap || v.configurations.some((c) => (c.capacity ?? 0) >= Number(minCap))));
+  const selected = all.find((v) => v.id === sel);
+  const cmp = all.filter((v) => compare.includes(v.id));
   return (
     <div className="stack">
       <h1>Venue Explorer</h1>
-      <p className="lede">Nine seed spaces across Toronto, New York City and Greater Los Angeles. Figures are transcribed from official pages and shown as <Badge kind="Source available" /> until someone reviews them at source. No venue here is a measured digital twin, and none has live availability.</p>
+      <p className="lede">Nine seed spaces across Toronto, New York City and Greater Los Angeles, transcribed from official pages and shown as <Badge kind="Source available" /> until someone reviews them at source — plus any venues you save from <button className="link" onClick={() => go('discover')}>Discover</button>, shown as <Badge kind="Provider-reported" />. No venue here is a measured digital twin, and none has live availability.</p>
       <BookingState />
       <div className="row gap wrap filters">
-        <Field label="Market"><select value={market} onChange={(e) => setMarket(e.target.value)}><option value="">All</option><option>Toronto</option><option>New York City</option><option>Greater Los Angeles</option></select></Field>
+        <Field label="Market"><select value={market} onChange={(e) => setMarket(e.target.value)}><option value="">All</option>{markets.map((m) => <option key={m}>{m}</option>)}</select></Field>
         <Field label="Min. capacity"><input inputMode="numeric" value={minCap} onChange={(e) => setMinCap(e.target.value)} /></Field>
         <Field label="Suits"><select value={suit} onChange={(e) => setSuit(e.target.value)}><option value="">Any</option>{['comedy', 'concert', 'panel', 'conference', 'gala', 'wedding', 'festival', 'community'].map((s) => <option key={s}>{s}</option>)}</select></Field>
       </div>
@@ -254,7 +281,7 @@ export function Venues() {
         {list.map((v) => (
           <div key={v.id} className={`card venue-card ${sel === v.id ? 'is-active' : ''}`}>
             <button className="card-main" onClick={() => setSel(v.id)}>
-              <small className="muted">{v.market}</small>
+              <small className="muted">{v.market}{v.provider && ` · saved from ${v.provider.id === 'ticketmaster' ? 'Ticketmaster' : 'OpenStreetMap'}`}</small>
               <strong>{v.space}</strong>
               <span className="muted">{v.campus}</span>
               <span>{v.configurations.map((c) => `${c.name}: ${c.capacity ?? 'unknown'}`).join(' · ')}</span>
@@ -263,6 +290,7 @@ export function Venues() {
             <label className="check small">
               <input type="checkbox" checked={compare.includes(v.id)} disabled={!compare.includes(v.id) && compare.length >= 3} onChange={(e) => setCompare(e.target.checked ? [...compare, v.id] : compare.filter((x) => x !== v.id))} /> Compare
             </label>
+            {v.provider && (events.some((e) => e.venueId === v.id) ? <span className="small muted">In use by an event</span> : <button className="btn ghost sm" onClick={() => removeVenue(v.id)}>Remove saved venue</button>)}
           </div>
         ))}
         {!list.length && <Empty title="No venues match these filters" />}

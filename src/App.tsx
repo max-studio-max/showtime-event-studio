@@ -3,6 +3,7 @@ import { STATUS_LABEL } from './engine/lifecycle';
 import { useActiveEvent, useStore, type Route } from './state/store';
 import { useDerived, useFmtMoney } from './ui/kit';
 import { Home } from './pages/Home';
+import { Discover } from './pages/Discover';
 import { Events } from './pages/Events';
 import { Venues } from './pages/Venues';
 import { Spotlight } from './pages/Spotlight';
@@ -18,6 +19,7 @@ const Studio = lazy(() => import('./pages/Studio').then((m) => ({ default: m.Stu
 
 const NAV: { route: Route; label: string; hint: string }[] = [
   { route: 'home', label: 'Home', hint: 'Portfolio & readiness' },
+  { route: 'discover', label: 'Discover', hint: 'Live venues, events, acts, suppliers' },
   { route: 'events', label: 'Events', hint: 'All events, templates, status' },
   { route: 'venues', label: 'Venue Explorer', hint: 'Real venues & evidence' },
   { route: 'studio', label: 'Studio', hint: 'FIT + STAGECRAFT 3D' },
@@ -67,6 +69,18 @@ function ContextBar() {
         {saveState === 'saved' ? 'Saved locally' : saveState === 'saving' ? 'Saving…' : saveState === 'failed' ? `Save failed${saveError ? `: ${saveError}` : ''}` : 'Unsaved'}
       </div>
     </header>
+  );
+}
+
+function MigrationBanner() {
+  const notice = useStore((s) => s.migrationNotice);
+  const [hidden, setHidden] = useState(false);
+  if (!notice || hidden) return null;
+  return (
+    <div className="migration-banner" role="status">
+      {notice}
+      <button className="btn ghost sm" onClick={() => setHidden(true)}>Dismiss</button>
+    </div>
   );
 }
 
@@ -136,6 +150,7 @@ export function App() {
   const page = (() => {
     switch (route) {
       case 'home': return <Home />;
+      case 'discover': return <Discover />;
       case 'events': return <Events />;
       case 'venues': return <Venues />;
       case 'studio': return <Suspense fallback={<div className="loading">Loading 3D studio…</div>}><Studio /></Suspense>;
@@ -176,6 +191,7 @@ export function App() {
       </nav>
       <div className="main-col">
         <ContextBar />
+        <MigrationBanner />
         <main id="main" className={`page page-${route}`}>{page}</main>
       </div>
       {palette && <CommandPalette onClose={() => setPalette(false)} />}

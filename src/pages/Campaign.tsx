@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { channelById, channels } from '../data/channels';
 import { nowIso, uid } from '../domain/factory';
 import type { CampaignLine, ShowEvent } from '../domain/types';
-import { buildUtmUrl, channelMetrics, modeledTickets, parseCsv } from '../engine/operations';
+import { buildUtmUrl, channelMetrics, mergeObserved, modeledTickets, parseMetricRows } from '../engine/operations';
 import { useStore } from '../state/store';
 import { ExternalLink, Field, MoneyInput, NeedEvent, NumInput, Panel, Tag, useFmtMoney } from '../ui/kit';
 
@@ -12,21 +12,6 @@ const Kind = ({ k }: { k: 'rule' | 'observed' | 'assumption' | 'estimate' | 'una
   return <span className={`kind kind-${k}`}>{label}</span>;
 };
 
-function importMetrics(text: string, source: string): CampaignLine['observed'] | string {
-  const rows = parseCsv(text.trim());
-  if (rows.length < 2) return 'CSV needs a header row and at least one data row';
-  const h = rows[0].map((x) => x.trim().toLowerCase());
-  const col = (n: string) => h.findIndex((x) => x === n);
-  const need = ['impressions', 'clicks', 'conversions', 'spend'];
-  const missing = need.filter((n) => col(n) < 0);
-  if (missing.length) return `Missing column(s): ${missing.join(', ')} (revenue optional)`;
-  const sum = (n: string, money = false) =>
-    rows.slice(1).reduce((s, r) => {
-      const v = Number((r[col(n)] ?? '').replace(/[$,]/g, ''));
-      return s + (Number.isFinite(v) ? (money ? Math.round(v * 100) : v) : 0);
-    }, 0);
-  return { impressions: sum('impressions'), clicks: sum('clicks'), conversions: sum('conversions'), spendMinor: sum('spend', true), revenueMinor: col('revenue') >= 0 ? sum('revenue', true) : 0, importedAt: nowIso(), source };
-}
 
 function Line({ ev, l }: { ev: ShowEvent; l: CampaignLine }) {
   const update = useStore((s) => s.updateEvent);
@@ -85,9 +70,13 @@ function Line({ ev, l }: { ev: ShowEvent; l: CampaignLine }) {
         onChange={async (e) => {
           const f = e.target.files?.[0];
           if (!f) return;
-          const r = importMetrics(await f.text(), f.name);
-          if (typeof r === 'string') setErr(r);
-          else (setErr(null), patch({ observed: r }, 'import metrics'));
+          const rows = parseMetricRows(await f.text());
+          if (typeof rows === 'string') setErr(rows);
+          else {
+            const m = mergeObserved(l.observed, rows, f.name, nowIso());
+            setErr(m.duplicates ? `${m.added} new row(s) imported; ${m.duplicates} already-imported row(s) skipped.` : null);
+            if (m.added) patch({ observed: m.observed }, 'import metrics');
+          }
           e.target.value = '';
         }}
       />

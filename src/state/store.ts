@@ -7,10 +7,11 @@
 import { create } from 'zustand';
 import { createEvent, nowIso, uid } from '../domain/factory';
 import type { WorkspaceData } from '../domain/derive';
-import type { PriceOffer, Product, ShowEvent, SourceEvidence, TalentAct } from '../domain/types';
+import type { PriceOffer, Product, ProviderId, SavedReference, ServiceSupplier, ShowEvent, SourceEvidence, TalentAct, Venue } from '../domain/types';
 import type { UnitSystem } from '../engine/units';
+import { migrateWorkspace, SCHEMA } from './migrate';
 
-export type Route = 'home' | 'events' | 'venues' | 'studio' | 'spotlight' | 'catalog' | 'campaign' | 'service' | 'finance' | 'production' | 'settings';
+export type Route = 'home' | 'discover' | 'events' | 'venues' | 'studio' | 'spotlight' | 'catalog' | 'campaign' | 'service' | 'finance' | 'production' | 'settings';
 
 export interface Settings {
   units: UnitSystem;
@@ -19,6 +20,8 @@ export interface Settings {
   reducedMotion: boolean;
   requireReapproval: boolean;
   locale: string;
+  /** Live-data providers the user has switched on (all off by default). */
+  providers: Record<ProviderId, boolean>;
 }
 
 export type SaveState = 'saved' | 'saving' | 'unsaved' | 'failed';
@@ -59,13 +62,22 @@ interface State extends Persisted {
   removeAct: (id: string) => void;
   addEvidence: (e: SourceEvidence) => void;
   removeEvidence: (id: string) => void;
+  upsertVenue: (v: Venue) => void;
+  removeVenue: (id: string) => void;
+  upsertSupplier: (s: ServiceSupplier) => void;
+  removeSupplier: (id: string) => void;
+  upsertReference: (r: SavedReference) => void;
+  removeReference: (id: string) => void;
+  /** Add evidence rows, replacing same-id rows (re-saving refreshes the snapshot). */
+  mergeEvidence: (rows: SourceEvidence[]) => void;
+  migrationNotice: string | null;
   importWorkspace: (json: string) => string | null;
   exportWorkspace: () => string;
   resetWorkspace: () => void;
 }
 
 const KEY = 'showtime.workspace.v1';
-const SCHEMA = 1;
+const DEFAULT_PROVIDERS: Record<ProviderId, boolean> = { ticketmaster: false, osm_overpass: false, osm_nominatim: false, musicbrainz: false, bank_of_canada: false };
 
 function initial(): Persisted {
   const org = { id: uid('org'), name: 'My production company' };
@@ -79,18 +91,51 @@ function initial(): Persisted {
     offers: [],
     acts: [],
     evidence: [],
-    settings: { units: 'metric', hour24: false, highContrast: false, reducedMotion: false, requireReapproval: true, locale: 'en-CA' },
+    venues: [],
+    suppliers: [],
+    references: [],
+    settings: { units: 'metric', hour24: false, highContrast: false, reducedMotion: false, requireReapproval: true, locale: 'en-CA', providers: { ...DEFAULT_PROVIDERS } },
   };
 }
 
-function load(): Persisted {
+let migrationNotice: string | null = null;
+
+function hydrate(p: Persisted): Persisted {
+  const i = initial();
+  return { ...i, ...p, settings: { ...i.settings, ...p.settings, providers: { ...DEFAULT_PROVIDERS, ...(p.settings?.providers ?? {}) } } };
+}
+
+function keep(name: string, raw: string) {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return initial();
-    const p = JSON.parse(raw) as Persisted;
-    if (p.schema !== SCHEMA) return initial();
-    return { ...initial(), ...p, settings: { ...initial().settings, ...p.settings } };
+    localStorage.setItem(`${KEY}.${name}-${Date.now()}`, raw);
   } catch {
+    /* storage full: the original key is still untouched */
+  }
+}
+
+function load(): Persisted {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(KEY);
+  } catch {
+    return initial();
+  }
+  if (!raw) return initial();
+  try {
+    const m = migrateWorkspace(JSON.parse(raw));
+    if (!m.ok) {
+      keep('unreadable', raw);
+      migrationNotice = `Your saved workspace could not be opened (${m.reason}). A copy was kept in browser storage; starting empty.`;
+      return initial();
+    }
+    if (m.changed) {
+      keep(`backup-schema${m.from}`, raw);
+      migrationNotice = `Workspace upgraded from schema ${m.from} to ${SCHEMA}. A backup of the previous version was kept in browser storage.`;
+    }
+    return hydrate(m.data as unknown as Persisted);
+  } catch {
+    keep('unreadable', raw);
+    migrationNotice = 'Your saved workspace was corrupt. A copy was kept in browser storage; starting empty.';
     return initial();
   }
 }
@@ -105,6 +150,9 @@ const pick = (s: State): Persisted => ({
   offers: s.offers,
   acts: s.acts,
   evidence: s.evidence,
+  venues: s.venues,
+  suppliers: s.suppliers,
+  references: s.references,
   settings: s.settings,
 });
 
@@ -119,6 +167,7 @@ export const useStore = create<State>((set, get) => ({
   past: {},
   future: {},
   toast: null,
+  migrationNotice,
   go: (route) => set({ route }),
   setToast: (toast) => set({ toast }),
   setActive: (activeEventId) => set({ activeEventId }),
@@ -171,12 +220,34 @@ export const useStore = create<State>((set, get) => ({
   removeAct: (id) => set((s) => ({ acts: s.acts.filter((x) => x.id !== id) })),
   addEvidence: (e) => set((s) => ({ evidence: [...s.evidence, e] })),
   removeEvidence: (id) => set((s) => ({ evidence: s.evidence.filter((x) => x.id !== id) })),
+  upsertVenue: (v) => set((s) => ({ venues: s.venues.some((x) => x.id === v.id) ? s.venues.map((x) => (x.id === v.id ? v : x)) : [...s.venues, v] })),
+  removeVenue: (id) =>
+    set((s) => {
+      const v = s.venues.find((x) => x.id === id);
+      const owned = new Set([id, ...(v?.configurations.map((c) => c.id) ?? [])]);
+      // Drop the venue's saved provider facts and any reviews of them.
+      const dropped = new Set(s.evidence.filter((e) => owned.has(e.entityId) && e.providerId).map((e) => e.id));
+      return { venues: s.venues.filter((x) => x.id !== id), evidence: s.evidence.filter((e) => !dropped.has(e.id) && !dropped.has(e.fieldPath.replace(/^review:/, ''))) };
+    }),
+  upsertSupplier: (v) => set((s) => ({ suppliers: s.suppliers.some((x) => x.id === v.id) ? s.suppliers.map((x) => (x.id === v.id ? v : x)) : [...s.suppliers, v] })),
+  removeSupplier: (id) =>
+    set((s) => {
+      const ids = new Set(s.suppliers.find((x) => x.id === id)?.evidenceIds ?? []);
+      return { suppliers: s.suppliers.filter((x) => x.id !== id), evidence: s.evidence.filter((e) => !ids.has(e.id)) };
+    }),
+  upsertReference: (r) => set((s) => ({ references: s.references.some((x) => x.id === r.id) ? s.references.map((x) => (x.id === r.id ? r : x)) : [...s.references, r] })),
+  removeReference: (id) => set((s) => ({ references: s.references.filter((x) => x.id !== id) })),
+  mergeEvidence: (rows) =>
+    set((s) => {
+      const ids = new Set(rows.map((r) => r.id));
+      return { evidence: [...s.evidence.filter((e) => !ids.has(e.id)), ...rows] };
+    }),
   exportWorkspace: () => JSON.stringify(pick(get()), null, 2),
   importWorkspace: (json) => {
     try {
-      const p = JSON.parse(json) as Persisted;
-      if (p.schema !== SCHEMA || !Array.isArray(p.events)) return 'Not a SHOWTIME workspace export (schema mismatch)';
-      set({ ...initial(), ...p, past: {}, future: {} });
+      const m = migrateWorkspace(JSON.parse(json));
+      if (!m.ok) return m.reason;
+      set({ ...hydrate(m.data as unknown as Persisted), past: {}, future: {} });
       return null;
     } catch (e) {
       return `Could not read file: ${(e as Error).message}`;

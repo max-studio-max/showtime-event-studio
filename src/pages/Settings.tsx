@@ -1,6 +1,49 @@
 import { useState } from 'react';
+import type { ProviderId } from '../domain/types';
+import { useProviderStatus } from '../integrations/client';
+import { PROVIDERS } from '../integrations/providers';
 import { useStore } from '../state/store';
-import { Confirm, download, Field, Panel } from '../ui/kit';
+import { Confirm, download, ExternalLink, Field, Panel, Tag } from '../ui/kit';
+
+function ProvidersPanel() {
+  const toggles = useStore((x) => x.settings.providers);
+  const set = useStore((x) => x.setSettings);
+  const { status, refresh } = useProviderStatus();
+  const byId = status?.ok ? new Map(status.data.map((p) => [p.id, p])) : null;
+  return (
+    <Panel title="Live data providers" actions={<button className="btn ghost sm" onClick={() => void refresh()}>Refresh status</button>}>
+      <p className="small">All providers start <b>off</b>. When on, searches go through the local SHOWTIME gateway (<code>npm run gateway</code>), which holds any keys server-side and enforces each provider’s rate limits. Results stay “provider-reported” until you review them at source.</p>
+      {status && !status.ok && <p className="error small" role="alert">Gateway: {status.error.message}</p>}
+      <table className="table">
+        <thead><tr><th>On</th><th>Provider</th><th>Gateway</th><th>Used today</th><th>Use & limits</th></tr></thead>
+        <tbody>
+          {(Object.keys(PROVIDERS) as ProviderId[]).map((id) => {
+            const p = PROVIDERS[id];
+            const st = byId?.get(id);
+            return (
+              <tr key={id}>
+                <td><input type="checkbox" aria-label={`Enable ${p.name}`} checked={toggles[id]} onChange={(e) => set({ providers: { ...toggles, [id]: e.target.checked } })} /></td>
+                <td>
+                  <ExternalLink href={p.homepage}>{p.name}</ExternalLink>
+                  <div className="small muted">{p.authMode === 'server_key' ? 'Free API key (server-side)' : 'No key needed'} · <ExternalLink href={p.termsUrl}>terms</ExternalLink></div>
+                </td>
+                <td>
+                  {!st ? <Tag tone="warn">unknown</Tag> : !st.configured ? <Tag tone="warn">not configured</Tag> : st.circuit === 'open' ? <Tag tone="bad">paused</Tag> : st.lastError ? <Tag tone="warn">last call failed</Tag> : <Tag tone="good">ready</Tag>}
+                  {st?.lastError && <div className="small muted">{st.lastError.message}</div>}
+                  {st?.lastSuccessAt && <div className="small muted">last success {new Date(st.lastSuccessAt).toLocaleTimeString()}</div>}
+                  {st?.rateLimit?.available != null && <div className="small muted">quota left {st.rateLimit.available}/{st.rateLimit.limit}</div>}
+                </td>
+                <td className="num">{st ? `${st.budgetUsedToday}${st.dailyBudget ? ` / ${st.dailyBudget}` : ''}` : '—'}</td>
+                <td className="small">{p.permittedUses}<div className="muted">{p.limitations}</div></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="small muted">Ticketmaster needs a free key from developer.ticketmaster.com in <code>.env</code> as <code>TICKETMASTER_API_KEY</code> (never in a <code>VITE_</code> variable). Not used: Google Places (requires billing), ad-platform APIs (require approved developer access); those stay link-only.</p>
+    </Panel>
+  );
+}
 
 export function SettingsPage() {
   const s = useStore((x) => x.settings);
@@ -47,6 +90,7 @@ export function SettingsPage() {
         </div>
         {msg && <p className="small" role="status">{msg}</p>}
       </Panel>
+      <ProvidersPanel />
       <Panel title="Connections">
         <p className="small">No external accounts are connected. Ad platforms, ticketing, calendars and supplier feeds are link-only until an authorized server-side integration exists — SHOWTIME never posts, books, buys or spends on your behalf.</p>
       </Panel>
